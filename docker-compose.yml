@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # Port for RabbitMQ messaging
+      - "15672:15672" # Port for RabbitMQ Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_ERLANG_COOKIE: "rabbitmq_cookie"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq # Persistent data storage
+      - rabbitmq_logs:/var/log/rabbitmq # Log files
+
+volumes:
+  rabbitmq_data:
+  rabbitmq_logs:
+
