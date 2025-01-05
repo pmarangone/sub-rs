@@ -1,6 +1,9 @@
 use futures_util::{task::LocalSpawnExt, StreamExt};
 use lapin::{options::*, types::FieldTable, Channel, Connection, ConnectionProperties, Consumer};
-use tracing::info;
+use serde_json::Error;
+use tracing::{debug, error, info};
+
+use crate::{db::primary_op, user::GeneralParams};
 
 /// Connect to RabbitMQ and return the connection.
 pub async fn connect_to_rabbitmq(addr: &str) -> lapin::Result<Connection> {
@@ -22,6 +25,29 @@ pub async fn declare_queue(channel: &Channel, queue_name: &str) -> lapin::Result
     Ok(())
 }
 
+fn process_message(_data: &[u8]) {
+    let result: Result<GeneralParams, Error> = serde_json::from_slice(_data);
+    let client = primary_op::create_connection();
+    match (result, client) {
+        (Ok(dat), Ok(mut client)) => {
+            // info!("Inserting values into database. {:?}", &dat.to_string())
+            info!("Inserting values into database.");
+            match primary_op::insert_into_table(client, dat) {
+                Ok(_) => {
+                    info!("Values inserted successfully!")
+                }
+                Err(err) => {
+                    error!("Insertion failed. {:?}", err);
+                }
+            }
+        }
+        (Err(err_parser), Err(err_connection)) => {
+            error!("Parser and Connection to database failed.")
+        }
+        _ => debug!("Gotcha!"),
+    }
+}
+
 pub async fn consume_messages(consumer: Consumer, channel: Channel) -> lapin::Result<()> {
     info!("Consumer started");
 
@@ -29,20 +55,22 @@ pub async fn consume_messages(consumer: Consumer, channel: Channel) -> lapin::Re
     consumer
         .for_each(|delivery| async {
             if let Ok(delivery) = delivery {
-                // info!(
-                //     "Received message: {:?}",
-                //     std::str::from_utf8(&delivery.data)
-                // );
+                info!(
+                    "Received message: {:?}",
+                    std::str::from_utf8(&delivery.data)
+                );
+
+                process_message(&delivery.data);
 
                 // Acknowledge the message after processing it
                 if let Err(e) = channel
                     .basic_ack(delivery.delivery_tag, BasicAckOptions::default())
                     .await
                 {
-                    eprintln!("Failed to ack message: {:?}", e);
+                    error!("Failed to ack message: {:?}", e);
                 }
             } else {
-                eprintln!("Error receiving message.");
+                error!("Error receiving message.");
             }
         })
         .await;

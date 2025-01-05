@@ -16,6 +16,7 @@ services:
       - rabbitmq_logs:/var/log/rabbitmq # Log files
   postgres:
     image: postgres:13
+    container_name: postgres
     environment:
       - POSTGRES_DB=database
       - POSTGRES_USER=user

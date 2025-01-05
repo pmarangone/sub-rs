@@ -1,27 +1,63 @@
+use anyhow::{Error, Result as ResultHow};
 use futures_executor::LocalPool;
 
 mod consumer;
 mod custom_tracing;
+mod db;
+mod models;
 
 use consumer::*;
+use db::primary_op::{create_connection, create_table};
+use models::user;
+use postgres::Client;
+use tracing::error;
+
+fn db_init() -> Result<Client, Error> {
+    let client = create_connection();
+
+    match client {
+        Ok(mut c) => match create_table(&mut c) {
+            Ok(_) => Ok(c),
+            Err(err) => {
+                error!("{}", err);
+                ResultHow::Err(Error::msg("Failed to created table person."))
+            }
+        },
+        Err(err) => {
+            error!("{}", err);
+            ResultHow::Err(Error::msg("Connection to the database failed."))
+        }
+    }
+}
 
 fn main() -> lapin::Result<()> {
     tracing_subscriber::fmt::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    let addr = std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/%2f".into());
-    let mut executor = LocalPool::new();
+    match db_init() {
+        Ok(_client) => {
+            tracing::info!("Database connected successfully.");
 
-    executor.run_until(async {
-        let conn = connect_to_rabbitmq(&addr).await?;
+            let addr =
+                std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/%2f".into());
+            let mut executor = LocalPool::new();
 
-        let publisher_channel = conn.create_channel().await?;
-        let consumer_channel = conn.create_channel().await?;
+            executor.run_until(async {
+                let conn = connect_to_rabbitmq(&addr).await?;
 
-        declare_queue(&publisher_channel, "hello").await?;
+                let publisher_channel = conn.create_channel().await?;
+                let consumer_channel = conn.create_channel().await?;
 
-        // spawn_consumer(consumer_channel, "hello", "my_consumer", spawner).await
-        start_consumer(consumer_channel, "hello").await
-    })
+                declare_queue(&publisher_channel, "hello").await?;
+
+                // spawn_consumer(consumer_channel, "hello", "my_consumer", spawner).await
+                start_consumer(consumer_channel, "hello").await
+            })
+        }
+        Err(err) => {
+            error!("Application initialization failed: {}", err);
+            std::process::exit(1);
+        }
+    }
 }

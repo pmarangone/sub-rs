@@ -1483,6 +1483,8 @@ dependencies = [
  "lapin",
  "postgres",
  "postgres-types",
+ "serde",
+ "serde_json",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
