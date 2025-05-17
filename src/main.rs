@@ -8,6 +8,7 @@ mod models;
 
 use consumer::*;
 use db::primary_op::{create_connection, create_table};
+use lapin::protocol::queue;
 use models::user;
 use postgres::Client;
 use tracing::error;
@@ -35,29 +36,29 @@ fn main() -> lapin::Result<()> {
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
-    match db_init() {
-        Ok(_client) => {
-            tracing::info!("Database connected successfully.");
+    // match db_init() {
+    //     Ok(_client) => {
+    tracing::info!("Database connected successfully.");
 
-            let addr =
-                std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://127.0.0.1:5672/%2f".into());
-            let mut executor = LocalPool::new();
+    let addr = std::env::var("RABBITMQ_URI").unwrap_or_else(|_| "amqp://127.0.0.1:5672/%2f".into());
+    let queue_name = std::env::var("QUEUE_NAME").unwrap_or_else(|_| "notebooklm".into());
+    let mut executor = LocalPool::new();
 
-            executor.run_until(async {
-                let conn = connect_to_rabbitmq(&addr).await?;
+    executor.run_until(async {
+        let conn = connect_to_rabbitmq(&addr).await?;
 
-                let publisher_channel = conn.create_channel().await?;
-                let consumer_channel = conn.create_channel().await?;
+        // let publisher_channel = conn.create_channel().await?;
+        let consumer_channel = conn.create_channel().await?;
 
-                declare_queue(&publisher_channel, "hello").await?;
+        // declare_queue(&publisher_channel, &queue_name).await?;
 
-                // spawn_consumer(consumer_channel, "hello", "my_consumer", spawner).await
-                start_consumer(consumer_channel, "hello").await
-            })
-        }
-        Err(err) => {
-            error!("Application initialization failed: {}", err);
-            std::process::exit(1);
-        }
-    }
+        // spawn_consumer(consumer_channel, queue_name, "my_consumer", spawner).await
+        start_consumer(consumer_channel, &queue_name).await
+    })
+    // }
+    // Err(err) => {
+    //     error!("Application initialization failed: {}", err);
+    //     std::process::exit(1);
+    // }
+    // }
 }
