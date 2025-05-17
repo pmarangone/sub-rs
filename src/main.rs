@@ -32,6 +32,7 @@ fn db_init() -> Result<Client, Error> {
 }
 
 fn main() -> lapin::Result<()> {
+    println!("Hello world!");
     tracing_subscriber::fmt::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
