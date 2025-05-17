@@ -1,39 +1,53 @@
-# Stage 1: Builder
-FROM rust:latest as builder
+# Stage 1: Build Stage
+FROM rust:1.83-alpine AS builder
 
+# Set the working directory
 WORKDIR /app
 
-# Copy the Cargo.toml and Cargo.lock first to leverage Docker cache
+# Install dependencies
+RUN apk add --no-cache \
+    pkgconf \
+    postgresql-dev \
+    gcc \
+    musl-dev \
+    make \
+    openssl-dev # Add openssl-dev for building if needed by any crate
+
+# Copy only dependency files first (to leverage caching)
 COPY Cargo.toml Cargo.lock ./
 
-# Create a dummy src/main.rs to build dependencies and cache them
-RUN mkdir src/
-RUN echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-RUN rm -rf src/
+# Create a temporary empty src/lib.rs to allow `cargo fetch` to run
+RUN mkdir -p src && echo '' > src/lib.rs
 
-# Copy the rest of your source code
+# Fetch and compile dependencies only (ensuring cache reuse)
+RUN cargo fetch
+
+# Remove the temporary file before copying the actual source code
+RUN rm -rf src
+
+# Copy the actual source code separately
 COPY src ./src
 
-# Build the final release binary
+# Build the application in release mode
 RUN cargo build --release
 
-# Stage 2: Runner
-# Use a more recent Debian-based image with a newer GLIBC
-FROM debian:bookworm-slim
+# Stage 2: Runtime Stage
+FROM alpine:latest
 
-# Install any necessary runtime dependencies
-# Based on your dependencies (postgres, lapin), you might need these.
-# Adjust based on your actual application's runtime requirements.
-# libpq5 is the client library for PostgreSQL
-RUN apt-get update && \
-    apt-get install -y libpq5 openssl pkg-config && \
-    rm -rf /var/lib/apt/lists/*
+# Install necessary runtime dependencies
+# Corrected openssl package name
+RUN apk add --no-cache postgresql-libs openssl
 
+# Set the working directory
 WORKDIR /app
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /app/target/release/pub-sub-rs ./
+# Copy only the built binary from the builder stage
+# IMPORTANT: Ensure the binary name matches your project name (pub-sub-rs)
+COPY --from=builder /app/target/release/pub-sub-rs ./pub-sub-rs
 
-# Set the entrypoint to run your application
+# Expose the application port (if applicable)
+EXPOSE 8000
+
+# Run the application
+# IMPORTANT: Ensure the command matches your binary name (pub-sub-rs)
 CMD ["./pub-sub-rs"]
