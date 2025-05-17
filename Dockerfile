@@ -19,14 +19,15 @@ COPY src ./src
 RUN cargo build --release
 
 # Stage 2: Runner
-# Use a minimal Debian-based image
-FROM debian:bullseye-slim
+# Use a more recent Debian-based image with a newer GLIBC
+FROM debian:bookworm-slim
 
 # Install any necessary runtime dependencies
 # Based on your dependencies (postgres, lapin), you might need these.
 # Adjust based on your actual application's runtime requirements.
+# libpq5 is the client library for PostgreSQL
 RUN apt-get update && \
-    apt-get install -y libpq-dev openssl pkg-config && \
+    apt-get install -y libpq5 openssl pkg-config && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
